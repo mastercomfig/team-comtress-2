@@ -828,7 +828,7 @@ bool ConvertToATIxN(  const uint8 *src, ImageFormat srcImageFormat,
 					  uint8 *dst, ImageFormat dstImageFormat,
 					  int width, int height, int srcStride, int dstStride )
 {
-#if !defined( _X360 ) && !defined( POSIX )
+#if !defined( _X360 ) && !defined( POSIX ) && !defined( _WIN64 )
 
 	// from rgb(a) to ATIxN
 	if( srcStride != 0 || dstStride != 0 )
@@ -867,7 +867,9 @@ bool ConvertToATIxN(  const uint8 *src, ImageFormat srcImageFormat,
 
 	return true;
 #else
+	// x64: Looks like these formats are optional, skip for now.
 	Assert( 0 );
+	Warning("Implement ConvertToATIxN image format convertor");
 	return false;
 #endif
 }
@@ -877,7 +879,7 @@ bool ConvertToDXTLegacy(  const uint8 *src, ImageFormat srcImageFormat,
  						  uint8 *dst, ImageFormat dstImageFormat, 
 					      int width, int height, int srcStride, int dstStride )
 {
-#if !defined( _X360 ) && !defined( POSIX )
+#if !defined( _X360 ) && !defined( POSIX ) && !defined( _WIN64 )
 	// from rgb(a) to dxtN
 	if( srcStride != 0 || dstStride != 0 )
 		return false;
@@ -946,7 +948,9 @@ bool ConvertToDXTLegacy(  const uint8 *src, ImageFormat srcImageFormat,
 	S3TCencode( &descIn, NULL, &descOut, dst, dwEncodeType, weight );
 	return true;
 #else
+	// x64: Looks like these formats are optional, skip for now.
 	Assert( 0 );
+	Warning("Implement ConvertToDXTLegacy image format convertor");
 	return false;
 #endif
 }
@@ -1410,7 +1414,7 @@ bool ConvertImageFormat( const uint8 *src, ImageFormat srcImageFormat,
 				ConvertFromDXT1( src, ( BGRA5551_t * )dst, width, height );
 				return true;
 			}
-			if ( dstImageFormat == IMAGE_FORMAT_BGRA4444 )
+			if ( dstImageFormat == IMAGE_FORMAT_BGRA4444 ) //-V547
 			{
 				ConvertFromDXT1( src, ( BGRA4444_t * )dst, width, height );
 				return true;
@@ -1466,7 +1470,7 @@ bool ConvertImageFormat( const uint8 *src, ImageFormat srcImageFormat,
 				ConvertFromDXT5( src, ( BGRA5551_t * )dst, width, height );
 				return true;
 			}
-			if ( dstImageFormat == IMAGE_FORMAT_BGRA4444 )
+			if ( dstImageFormat == IMAGE_FORMAT_BGRA4444 ) //-V547
 			{
 				ConvertFromDXT5( src, ( BGRA4444_t * )dst, width, height );
 				return true;

@@ -5,6 +5,7 @@
 //===========================================================================//
 
 #include "inputsystem.h"
+#include <hidusage.h>
 #include "key_translation.h"
 #include "inputsystem/ButtonCode.h"
 #include "inputsystem/AnalogCode.h"
@@ -29,31 +30,6 @@ ConVar joy_xcontroller_found( "joy_xcontroller_found", "1", FCVAR_HIDDEN, "Autom
 static CInputSystem g_InputSystem;
 EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CInputSystem, IInputSystem, 
 						INPUTSYSTEM_INTERFACE_VERSION, g_InputSystem );
-
-
-
-#if defined( WIN32 ) && !defined( _X360 )
-typedef BOOL (WINAPI *RegisterRawInputDevices_t)
-(
-	PCRAWINPUTDEVICE pRawInputDevices,
-	UINT uiNumDevices,
-	UINT cbSize
-);
-
-typedef UINT (WINAPI *GetRawInputData_t)
-(
-	HRAWINPUT hRawInput,
-	UINT uiCommand,
-	LPVOID pData,
-	PUINT pcbSize,
-	UINT cbSizeHeader
-);
-
-RegisterRawInputDevices_t pfnRegisterRawInputDevices;
-GetRawInputData_t pfnGetRawInputData;
-#endif
-
-
 
 //-----------------------------------------------------------------------------
 // Constructor, destructor
@@ -146,6 +122,8 @@ InitReturnVal_t CInputSystem::Init()
 		return INIT_FAILED;
 #endif
 
+	// x64: No sense in Steam controller without Steam, as it requires Steam.
+#if !defined( NO_STEAM )
 	// Initialize the input system copy of the steam API context, for use by controller stuff (don't do this if we're a dedicated server).
 	if ( !m_bSkipControllerInitialization && SteamAPI_InitSafe() )
 	{
@@ -161,6 +139,7 @@ InitReturnVal_t CInputSystem::Init()
 			}
 		}
 	}
+#endif
 
 	ButtonCode_InitKeyTranslationTable();
 	ButtonCode_UpdateScanCodeLayout();
@@ -175,7 +154,7 @@ InitReturnVal_t CInputSystem::Init()
 
 #if defined( PLATFORM_WINDOWS_PC )
 		// NVNT try and load and initialize through the haptic dll, but only if the drivers are installed
-		HMODULE hdl = LoadLibraryEx( "hdl.dll", NULL, LOAD_LIBRARY_AS_DATAFILE );
+		HMODULE hdl = LoadLibraryExW( L"hdl.dll", NULL, LOAD_LIBRARY_AS_DATAFILE );
 
 		if ( hdl )
 		{
@@ -202,17 +181,7 @@ InitReturnVal_t CInputSystem::Init()
 
 #elif defined( WIN32 ) && !defined( _X360 )
 
-	// Check if this version of windows supports raw mouse input (later than win2k)
-	m_bRawInputSupported = false;
-
-	CSysModule *m_pRawInputDLL = Sys_LoadModule( "USER32.dll" );
-	if ( m_pRawInputDLL )
-	{
-		pfnRegisterRawInputDevices = (RegisterRawInputDevices_t)GetProcAddress( (HMODULE)m_pRawInputDLL, "RegisterRawInputDevices" );
-		pfnGetRawInputData = (GetRawInputData_t)GetProcAddress( (HMODULE)m_pRawInputDLL, "GetRawInputData" );
-		if ( pfnRegisterRawInputDevices && pfnGetRawInputData )
-			m_bRawInputSupported = true;
-	}
+	m_bRawInputSupported = true;
 
 #endif
 
@@ -299,41 +268,25 @@ void CInputSystem::AttachToWindow( void* hWnd )
 	}
 
 #if defined( PLATFORM_WINDOWS )
-	m_ChainedWndProc = (WNDPROC)GetWindowLongPtrW( (HWND)hWnd, GWLP_WNDPROC );
-	SetWindowLongPtrW( (HWND)hWnd, GWLP_WNDPROC, (LONG_PTR)InputSystemWindowProc );
+	m_ChainedWndProc = reinterpret_cast<WNDPROC>(GetWindowLongPtrW( (HWND)hWnd, GWLP_WNDPROC ));
+	SetWindowLongPtrW( (HWND)hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(InputSystemWindowProc) );
 #endif
 
 	m_hAttachedHWnd = (HWND)hWnd;
-
-#if 0 && defined( PLATFORM_WINDOWS )
-	POINT pt;
-	pt.x = 0; pt.y = 0;
-	ClientToScreen((HWND)m_hAttachedHWnd, &pt);
-	m_windowOffsetX = pt.x;
-	m_windowOffsetY = pt.y;
-#endif
 
 #if defined( PLATFORM_WINDOWS_PC ) && !defined( USE_SDL )
 	// NVNT inform novint devices of window
 	AttachWindowToNovintDevices( hWnd );
 
 	// register to read raw mouse input
-
-#if !defined(HID_USAGE_PAGE_GENERIC)
-#define HID_USAGE_PAGE_GENERIC         ((USHORT) 0x01)
-#endif
-#if !defined(HID_USAGE_GENERIC_MOUSE)
-#define HID_USAGE_GENERIC_MOUSE        ((USHORT) 0x02)
-#endif
-
 	if ( m_bRawInputSupported )
 	{
 		RAWINPUTDEVICE Rid[1];
-		Rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC; 
-		Rid[0].usUsage = HID_USAGE_GENERIC_MOUSE; 
-		Rid[0].dwFlags = RIDEV_INPUTSINK;   
-		Rid[0].hwndTarget = g_InputSystem.m_hAttachedHWnd; // GetHhWnd;
-		pfnRegisterRawInputDevices(Rid, ARRAYSIZE(Rid), sizeof(Rid[0]));
+		Rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC;
+		Rid[0].usUsage = HID_USAGE_GENERIC_MOUSE;
+		Rid[0].dwFlags = RIDEV_INPUTSINK;
+		Rid[0].hwndTarget = m_hAttachedHWnd;
+		m_bRawInputSupported = !!RegisterRawInputDevices(Rid, ARRAYSIZE(Rid), sizeof(Rid[0]));
 	}
 #endif
 
@@ -355,8 +308,8 @@ void CInputSystem::DetachFromWindow( )
 #if defined( PLATFORM_WINDOWS )
 	if ( m_ChainedWndProc )
 	{
-		SetWindowLongPtrW( m_hAttachedHWnd, GWLP_WNDPROC, (LONG_PTR)m_ChainedWndProc );
-		m_ChainedWndProc = 0;
+		SetWindowLongPtrW( m_hAttachedHWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(m_ChainedWndProc) );
+		m_ChainedWndProc = nullptr;
 	}
 #endif
 
@@ -552,7 +505,7 @@ void CInputSystem::ProcessEvent( UINT uMsg, WPARAM wParam, LPARAM lParam )
 	// To prevent subtle input timing bugs, all button events must be fed 
 	// through the window proc once per frame, same as the keyboard and mouse.
 	HWND hWnd = GetFocus();
-	WNDPROC windowProc = (WNDPROC)GetWindowLongPtrW(hWnd, GWLP_WNDPROC );
+	WNDPROC windowProc = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(hWnd, GWLP_WNDPROC ));
 	if ( windowProc )
 	{
 		windowProc( hWnd, uMsg, wParam, lParam );
@@ -1458,7 +1411,7 @@ LRESULT CInputSystem::WindowProc( HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 			PostEvent( IE_ButtonPressed, m_nLastSampleTick, code, code );
 			PostEvent( IE_ButtonReleased, m_nLastSampleTick, code, code );
 
-			state.m_pAnalogDelta[ MOUSE_WHEEL ] = ( (short)HIWORD(wParam) ) / WHEEL_DELTA;
+			state.m_pAnalogDelta[ MOUSE_WHEEL ] = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
 			state.m_pAnalogValue[ MOUSE_WHEEL ] += state.m_pAnalogDelta[ MOUSE_WHEEL ];
 			PostEvent( IE_AnalogValueChanged, m_nLastSampleTick, MOUSE_WHEEL, state.m_pAnalogValue[ MOUSE_WHEEL ], state.m_pAnalogDelta[ MOUSE_WHEEL ] );
 		}
@@ -1469,17 +1422,20 @@ LRESULT CInputSystem::WindowProc( HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 		{
 			if ( m_bRawInputSupported )
 			{
-				UINT dwSize = 40;
-				static BYTE lpb[40];
+				UINT bufferSize{ 40 };
+				alignas(RAWINPUT) static BYTE buffer[40];
 
-				pfnGetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
-
-				RAWINPUT* raw = (RAWINPUT*)lpb;
-				if (raw->header.dwType == RIM_TYPEMOUSE) 
+				auto hInput = reinterpret_cast<HRAWINPUT>(lParam);
+				constexpr UINT RAW_INPUT_READ_FAILED{ static_cast<UINT>(-1) };
+				if (RAW_INPUT_READ_FAILED != GetRawInputData(hInput, RID_INPUT, buffer, &bufferSize, sizeof(RAWINPUTHEADER)))
 				{
-					m_mouseRawAccumX += raw->data.mouse.lLastX;
-					m_mouseRawAccumY += raw->data.mouse.lLastY;
-				} 
+					auto* raw = reinterpret_cast<RAWINPUT*>(buffer);
+					if (raw->header.dwType == RIM_TYPEMOUSE)
+					{
+						m_mouseRawAccumX += raw->data.mouse.lLastX;
+						m_mouseRawAccumY += raw->data.mouse.lLastY;
+					}
+				}
 			}
 		}
 		break;
