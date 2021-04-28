@@ -99,7 +99,7 @@ void *g_AllocRegions[] =
 // NOTE: this split is designed to force the 'large block' heap to ONLY perform virtual allocs (see
 //       DEFAULT_MMAP_THRESHOLD in malloc.cpp), to avoid ANY fragmentation or waste in an internal arena
 #define REGION_SPLIT (256*1024)
-#define SelectRegion( region, bytes ) g_AllocRegions[bytes < REGION_SPLIT]
+#define SelectRegion( region, bytes ) g_AllocRegions[(bytes) < REGION_SPLIT]
 #endif
 #else  // MEMALLOC_REGIONS
 #define SelectRegion( region, bytes ) g_AllocRegions[region]
@@ -141,22 +141,22 @@ inline void heapstats_internal( FILE *pFile )
 {
 	// @TODO: improve this presentation, as a table [6/1/2009 tom]
 	char buf[1024];
-	for ( int i = 0; i < ARRAYSIZE( g_AllocRegions ); i++ )
+	for ( size_t i = 0; i < ARRAYSIZE( g_AllocRegions ); i++ )
 	{
 		struct mallinfo info = mspace_mallinfo(      g_AllocRegions[ i ] );
 		size_t footPrint     = mspace_footprint(     g_AllocRegions[ i ] );
 		size_t maxFootPrint  = mspace_max_footprint( g_AllocRegions[ i ] );
 		_snprintf( buf, sizeof(buf),
-			"\ndlmalloc mspace %d (%s)\n"
-				"     %d:footprint     -%10d (total space used by the mspace)\n"
-				"     %d:footprint_max -%10d (maximum total space used by the mspace)\n"
-				"     %d:arena         -%10d (non-mmapped space allocated from system)\n"
-				"     %d:ordblks       -%10d (number of free chunks)\n"
-				"     %d:hblkhd        -%10d (space in mmapped regions)\n"
-				"     %d:usmblks       -%10d (maximum total allocated space)\n"
-				"     %d:uordblks      -%10d (total allocated space)\n"
-				"     %d:fordblks      -%10d (total free space)\n"
-				"     %d:keepcost      -%10d (releasable (via malloc_trim) space)\n",
+			"\ndlmalloc mspace %zu (%s)\n"
+				"     %zu:footprint     -%10zu (total space used by the mspace)\n"
+				"     %zu:footprint_max -%10zu (maximum total space used by the mspace)\n"
+				"     %zu:arena         -%10zu (non-mmapped space allocated from system)\n"
+				"     %zu:ordblks       -%10zu (number of free chunks)\n"
+				"     %zu:hblkhd        -%10zu (space in mmapped regions)\n"
+				"     %zu:usmblks       -%10zu (maximum total allocated space)\n"
+				"     %zu:uordblks      -%10zu (total allocated space)\n"
+				"     %zu:fordblks      -%10zu (total free space)\n"
+				"     %zu:keepcost      -%10zu (releasable (via malloc_trim) space)\n",
 				i, i?"medium-block":"large-block", i,footPrint, i,maxFootPrint, i,info.arena, i,info.ordblks, i,info.hblkhd, i,info.usmblks, i,info.uordblks, i,info.fordblks, i,info.keepcost );
 		if ( pFile )
 			fprintf( pFile, "%s", buf );
@@ -216,9 +216,6 @@ void *operator new[] ( unsigned int nSize, int nBlockUse, const char *pFileName,
 //-----------------------------------------------------------------------------
 // Singleton...
 //-----------------------------------------------------------------------------
-#pragma warning( disable:4074 ) // warning C4074: initializers put in compiler reserved initialization area
-#pragma init_seg( compiler )
-
 #if MEM_SBH_ENABLED
 CSmallBlockPool< CStdMemAlloc::CFixedAllocator< MBYTES_PRIMARY_SBH, true> >::SharedData_t CSmallBlockPool< CStdMemAlloc::CFixedAllocator< MBYTES_PRIMARY_SBH, true> >::gm_SharedData CONSTRUCT_EARLY;
 #ifdef MEMALLOC_USE_SECONDARY_SBH
@@ -229,21 +226,17 @@ CSmallBlockPool< CStdMemAlloc::CVirtualAllocator >::SharedData_t CSmallBlockPool
 #endif
 #endif // MEM_SBH_ENABLED
 
-static CStdMemAlloc s_StdMemAlloc CONSTRUCT_EARLY;
+IMemAlloc* GetMemoryAllocator()
+{
+	static CStdMemAlloc stdMemAlloc CONSTRUCT_EARLY;
+	return &stdMemAlloc;
+}
 
 #ifdef _PS3
 
 MemOverrideRawCrtFunctions_t *g_pMemOverrideRawCrtFns;
-IMemAlloc *g_pMemAllocInternalPS3 = &s_StdMemAlloc;
+IMemAlloc *g_pMemAllocInternalPS3 = NULL;
 PLATFORM_OVERRIDE_MEM_ALLOC_INTERNAL_PS3_IMPL
-
-#else // !_PS3
-
-#ifndef TIER0_VALIDATE_HEAP
-IMemAlloc *g_pMemAlloc = &s_StdMemAlloc;
-#else
-IMemAlloc *g_pActualAlloc = &s_StdMemAlloc;
-#endif
 
 #endif // _PS3
 
@@ -253,7 +246,7 @@ CStdMemAlloc::CStdMemAlloc()
 	m_bInCompact( false )
 {
 #ifdef _PS3
-	g_pMemAllocInternalPS3 = &s_StdMemAlloc;
+	g_pMemAllocInternalPS3 = GetMemoryAllocator();
 	PLATFORM_OVERRIDE_MEM_ALLOC_INTERNAL_PS3.m_pMemAllocCached = &s_StdMemAlloc;
 	malloc_managed_size mms;
 	mms.current_inuse_size = 0x12345678;
@@ -1073,12 +1066,7 @@ void *CSmallBlockHeap<CAllocator>::Realloc( void *p, size_t nBytes )
 		return p;
 	}
 
-	void *pNewBlock = NULL;
-
-	if ( !pNewBlock )
-	{
-		pNewBlock = MemAlloc_Alloc( nBytes ); // Call back out so blocks can move from the secondary to the primary pools
-	}
+	void *pNewBlock = MemAlloc_Alloc( nBytes ); // Call back out so blocks can move from the secondary to the primary pools
 
 	if ( !pNewBlock )
 	{
@@ -2119,7 +2107,7 @@ void CStdMemAlloc::DumpStatsFileBase( char const *pchFileBase )
 
 IVirtualMemorySection * CStdMemAlloc::AllocateVirtualMemorySection( size_t numMaxBytes )
 {
-#if defined( _GAMECONSOLE ) || defined( _WIN32 )
+#if defined( _GAMECONSOLE )
 	extern IVirtualMemorySection * VirtualMemoryManager_AllocateVirtualMemorySection( size_t numMaxBytes );
 	return VirtualMemoryManager_AllocateVirtualMemorySection( numMaxBytes );
 #else
@@ -2450,6 +2438,8 @@ void CStdMemAlloc::SetCRTAllocFailed( size_t nSize )
 #else
 	_snprintf( buffer, sizeof( buffer ), "***** OUT OF MEMORY! attempted allocation size: %u ****\n", nSize );
 #endif // COMPILER_GCC
+
+	buffer[ sizeof(buffer) - 1 ] = '\0';
 
 #ifdef _X360 
 	XBX_OutputDebugString( buffer );

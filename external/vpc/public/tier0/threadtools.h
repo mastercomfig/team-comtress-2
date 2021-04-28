@@ -488,13 +488,7 @@ private:
 			void *pData = CThreadLocalBase::Get();
 			return *reinterpret_cast<T*>( &pData );
 #else
-	#ifdef COMPILER_MSVC
-		#pragma warning ( disable : 4311 )
-	#endif
 			return reinterpret_cast<T>( CThreadLocalBase::Get() );
-	#ifdef COMPILER_MSVC
-		#pragma warning ( default : 4311 )
-	#endif
 #endif
 		}
 
@@ -505,13 +499,7 @@ private:
 			*reinterpret_cast<T*>( &pData ) = val;
 			CThreadLocalBase::Set( pData );
 #else
-	#ifdef COMPILER_MSVC
-		#pragma warning ( disable : 4312 )
-	#endif
 			CThreadLocalBase::Set( reinterpret_cast<void *>(val) );
-	#ifdef COMPILER_MSVC
-		#pragma warning ( default : 4312 )
-	#endif
 #endif
 		}
 	};
@@ -1919,10 +1907,14 @@ typedef RTL_CRITICAL_SECTION CRITICAL_SECTION;
 #ifndef _X360
 extern "C"
 {
-	void __declspec(dllimport) __stdcall InitializeCriticalSection(CRITICAL_SECTION *);
-	void __declspec(dllimport) __stdcall EnterCriticalSection(CRITICAL_SECTION *);
-	void __declspec(dllimport) __stdcall LeaveCriticalSection(CRITICAL_SECTION *);
-	void __declspec(dllimport) __stdcall DeleteCriticalSection(CRITICAL_SECTION *);
+#if (_WIN32_WINNT < 0x0600)
+	void __declspec(dllimport) __stdcall _Maybe_raises_SEH_exception_ InitializeCriticalSection(_Out_ CRITICAL_SECTION *);
+#else
+	void __declspec(dllimport) __stdcall InitializeCriticalSection(_Out_ CRITICAL_SECTION*);
+#endif
+	void __declspec(dllimport) __stdcall EnterCriticalSection(_Inout_ CRITICAL_SECTION *);
+	void __declspec(dllimport) __stdcall LeaveCriticalSection(_Inout_ CRITICAL_SECTION *);
+	void __declspec(dllimport) __stdcall DeleteCriticalSection(_Inout_ CRITICAL_SECTION *);
 };
 #endif
 #endif

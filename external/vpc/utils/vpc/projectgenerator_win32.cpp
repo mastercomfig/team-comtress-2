@@ -6,6 +6,8 @@
 
 #include "vpc.h"
 
+#include "tier0/memdbgon.h"
+
 #undef PROPERTYNAME
 #define PROPERTYNAME( X, Y ) { X##_##Y, #X, #Y },
 static PropertyName_t s_Win32PropertyNames[] =
@@ -51,7 +53,8 @@ bool CProjectGenerator_Win32::WriteFile( CProjectFile *pFile )
 bool CProjectGenerator_Win32::WriteFolder( CProjectFolder *pFolder )
 {
 	m_XMLWriter.PushNode( "Filter" );
-	m_XMLWriter.Write( CFmtStrMax( "Name=\"%s\"", m_XMLWriter.FixupXMLString( pFolder->m_Name.Get() ) ) );
+	CUtlString name = m_XMLWriter.FixupXMLString( pFolder->m_Name.Get() );
+	m_XMLWriter.Write( CFmtStrMax( "Name=\"%s\"", name.String() ) );
 	m_XMLWriter.Write( ">" );
 
 	for ( int iIndex = pFolder->m_Files.Head(); iIndex != pFolder->m_Files.InvalidIndex(); iIndex = pFolder->m_Files.Next( iIndex ) )
@@ -313,36 +316,36 @@ bool CProjectGenerator_Win32::WriteProperty( const PropertyState_t *pPropertySta
 		}
 	}
 
-	if ( pPropertyState )
+	switch ( pPropertyState->m_pToolProperty->m_nType )
 	{
-		switch ( pPropertyState->m_pToolProperty->m_nType )
+	case PT_BOOLEAN:
 		{
-		case PT_BOOLEAN:
+			bool bEnabled = Sys_StringToBool( pPropertyState->m_StringValue.Get() );
+			if ( pPropertyState->m_pToolProperty->m_bInvertOutput )
 			{
-				bool bEnabled = Sys_StringToBool( pPropertyState->m_StringValue.Get() );
-				if ( pPropertyState->m_pToolProperty->m_bInvertOutput )
-				{
-					bEnabled ^= 1;
-				}
-				m_XMLWriter.Write( CFmtStrMax( "%s=\"%s\"", pOutputName, bEnabled ? "true" : "false" ) );
+				bEnabled ^= 1;
 			}
-			break;
-
-		case PT_STRING:
-			m_XMLWriter.Write( CFmtStrMax( "%s=\"%s\"", pOutputName, m_XMLWriter.FixupXMLString( pPropertyState->m_StringValue.Get() ) ) );
-			break;
-
-		case PT_LIST:
-		case PT_INTEGER:
-			m_XMLWriter.Write( CFmtStrMax( "%s=\"%s\"", pOutputName, pPropertyState->m_StringValue.Get() ) );
-			break;
-
-		case PT_IGNORE:
-			break;
-
-		default:
-			g_pVPC->VPCError( "CProjectGenerator_Win32: WriteProperty, %s - not implemented", pOutputName );
+			m_XMLWriter.Write( CFmtStrMax( "%s=\"%s\"", pOutputName, bEnabled ? "true" : "false" ) );
 		}
+		break;
+
+	case PT_STRING:
+		{
+			CUtlString s = m_XMLWriter.FixupXMLString( pPropertyState->m_StringValue.Get() );
+			m_XMLWriter.Write( CFmtStrMax( "%s=\"%s\"", pOutputName, s.String() ) );
+		}
+		break;
+
+	case PT_LIST:
+	case PT_INTEGER:
+		m_XMLWriter.Write( CFmtStrMax( "%s=\"%s\"", pOutputName, pPropertyState->m_StringValue.Get() ) );
+		break;
+
+	case PT_IGNORE:
+		break;
+
+	default:
+		g_pVPC->VPCError( "CProjectGenerator_Win32: WriteProperty, %s - not implemented", pOutputName );
 	}
 
 	return true;

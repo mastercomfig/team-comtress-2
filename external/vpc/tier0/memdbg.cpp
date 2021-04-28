@@ -13,10 +13,13 @@
 //#include <malloc.h>
 #include <string.h>
 #include "tier0/dbg.h"
+#if defined( USE_STACK_TRACES )
 #include "tier0/stackstats.h"
+#endif
 #include "tier0/memalloc.h"
 #include "tier0/fasttimer.h"
 #include "mem_helpers.h"
+#include "tier0_strtools.h"
 #ifdef PLATFORM_WINDOWS_PC
 #undef WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -418,8 +421,13 @@ inline void *InternalMalloc( size_t nSize, const char *pFileName, int nLine )
 	pInternalMem = (DbgMemHeader_t *)_malloc_dbg( nSize + sizeof(DbgMemHeader_t), _NORMAL_BLOCK, pFileName, nLine );
 #endif
 
-	pInternalMem->nLogicalSize = nSize;
-	return pInternalMem + 1;
+	if ( pInternalMem )
+	{
+		pInternalMem->nLogicalSize = nSize;
+		return pInternalMem + 1;
+	}
+
+	return NULL;
 #endif // WIN32
 }
 
@@ -521,8 +529,13 @@ inline void *InternalRealloc( void *pMem, size_t nNewSize, const char *pFileName
 	pInternalMem = (DbgMemHeader_t *)_realloc_dbg( pInternalMem, nNewSize + sizeof(DbgMemHeader_t), _NORMAL_BLOCK, pFileName, nLine );
 #endif
 
-	pInternalMem->nLogicalSize = nNewSize;
-	return pInternalMem + 1;
+	if ( pInternalMem )
+	{
+		pInternalMem->nLogicalSize = nNewSize;
+		return pInternalMem + 1;
+	}
+
+	return NULL;
 #endif // WIN32
 }
 
@@ -742,11 +755,6 @@ public:
 };
 
 //-----------------------------------------------------------------------------
-
-#pragma warning( disable:4074 ) // warning C4074: initializers put in compiler reserved initialization area
-#pragma init_seg( compiler )
-
-//-----------------------------------------------------------------------------
 // NOTE! This should never be called directly from leaf code
 // Just use new,delete,malloc,free etc. They will call into this eventually
 //-----------------------------------------------------------------------------
@@ -960,7 +968,7 @@ private:
 
 	virtual IVirtualMemorySection * AllocateVirtualMemorySection( size_t numMaxBytes )
 	{
-#if defined( _GAMECONSOLE ) || defined( _WIN32 )
+#if defined( _GAMECONSOLE )
 		extern IVirtualMemorySection * VirtualMemoryManager_AllocateVirtualMemorySection( size_t numMaxBytes );
 		return VirtualMemoryManager_AllocateVirtualMemorySection( numMaxBytes );
 #else
@@ -1068,29 +1076,30 @@ g_CDbgMemAlloc_GetRawCrtMemOverrideFuncs_Early CONSTRUCT_EARLY;
 //-----------------------------------------------------------------------------
 // Singleton...
 //-----------------------------------------------------------------------------
-static CDbgMemAlloc s_DbgMemAlloc CONSTRUCT_EARLY;
+IMemAlloc* GetMemoryAllocator()
+{
+	static CDbgMemAlloc dbgMemAlloc CONSTRUCT_EARLY;
+	return &dbgMemAlloc;
+}
 
 #ifdef _PS3
 
-IMemAlloc *g_pMemAllocInternalPS3 = &s_DbgMemAlloc;
+IMemAlloc *g_pMemAllocInternalPS3 = NULL;
 PLATFORM_OVERRIDE_MEM_ALLOC_INTERNAL_PS3_IMPL
 
-#else // !_PS3
-
-#ifndef TIER0_VALIDATE_HEAP
-IMemAlloc *g_pMemAlloc CONSTRUCT_EARLY = &s_DbgMemAlloc;
-#else
-IMemAlloc *g_pActualAlloc = &s_DbgMemAlloc;
-#endif
 
 #endif // _PS3
 
 
 //-----------------------------------------------------------------------------
 
-CThreadMutex g_DbgMemMutex CONSTRUCT_EARLY;
+CThreadMutex& GetDbgMemMutex()
+{
+	static CThreadMutex dbgMemMutex CONSTRUCT_EARLY;
+	return dbgMemMutex;
+}
 
-#define HEAP_LOCK() AUTO_LOCK( g_DbgMemMutex )
+#define HEAP_LOCK() AUTO_LOCK( GetDbgMemMutex() )
 
 
 //-----------------------------------------------------------------------------
@@ -1142,8 +1151,8 @@ CDbgMemAlloc::CDbgMemAlloc() : m_sMemoryAllocFailed( (size_t)0 )
 	}
 
 #ifdef _PS3
-	g_pMemAllocInternalPS3 = &s_DbgMemAlloc;
-	PLATFORM_OVERRIDE_MEM_ALLOC_INTERNAL_PS3.m_pMemAllocCached = &s_DbgMemAlloc;
+	g_pMemAllocInternalPS3 = GetMemoryAllocator();
+	PLATFORM_OVERRIDE_MEM_ALLOC_INTERNAL_PS3.m_pMemAllocCached = GetMemoryAllocator();
 	malloc_managed_size mms;
 	mms.current_inuse_size = 0x12345678;
 	mms.current_system_size = 0x09ABCDEF;
@@ -2124,11 +2133,11 @@ void CDbgMemAlloc::DumpStatsFileBase( char const *pchFileBase )
 	static int s_FileCount = 0;
 	if (m_OutputFunc == DefaultHeapReportFunc)
 	{
-		char *pPath = "";
+		const char pPath[] = "";
 #ifdef _X360
-		pPath = "D:\\";
+		const char pPath[] = "D:\\";
 #elif defined( _PS3 )
-		pPath = "/app_home/";
+		const char pPath[] = "/app_home/";
 #endif
 		
 
@@ -2149,6 +2158,7 @@ void CDbgMemAlloc::DumpStatsFileBase( char const *pchFileBase )
 		_snprintf( szFileName, sizeof( szFileName ), "%s%s_%d.txt", pPath, s_szStatsMapName, s_FileCount );
 #else
 		_snprintf( szFileName, sizeof( szFileName ), "%s%s_%d.txt", pPath, pchFileBase, s_FileCount );
+		szFileName[sizeof(szFileName) - 1] = '\0';
 #endif
 
 		++s_FileCount;
@@ -2358,6 +2368,7 @@ void CDbgMemAlloc::SetCRTAllocFailed( size_t nSize )
 	DebuggerBreakIfDebugging();
 	char buffer[256];
 	_snprintf( buffer, sizeof( buffer ), "***** OUT OF MEMORY! attempted allocation size: %u ****\n", nSize );
+	buffer[sizeof(buffer) - 1] = '\0';
 #if defined( _PS3 ) && defined( _DEBUG )
 	DebuggerBreak();
 #endif // _PS3
@@ -2732,7 +2743,7 @@ void __attribute__ ((constructor)) mem_init(void)
 void *operator new( size_t nSize, int nBlockUse, const char *pFileName, int nLine )
 {
 	set_osx_hooks(); 
-	void *pMem = g_pMemAlloc->Alloc(nSize, pFileName, nLine);
+	void *pMem = GetMemoryAllocator()->Alloc(nSize, pFileName, nLine);
 	set_override_hooks(); 
 	return pMem;
 }
@@ -2740,7 +2751,7 @@ void *operator new( size_t nSize, int nBlockUse, const char *pFileName, int nLin
 void *operator new[] ( size_t nSize, int nBlockUse, const char *pFileName, int nLine )
 {
 	set_osx_hooks(); 
-	void *pMem = g_pMemAlloc->Alloc(nSize, pFileName, nLine);
+	void *pMem = GetMemoryAllocator()->Alloc(nSize, pFileName, nLine);
 	set_override_hooks(); 
 	return pMem;
 }
@@ -2750,7 +2761,7 @@ void *operator new[] ( size_t nSize, int nBlockUse, const char *pFileName, int n
 int GetAllocationCallStack( void *mem, void **pCallStackOut, int iMaxEntriesOut )
 {
 #if defined( USE_MEM_DEBUG ) && (defined( USE_STACK_TRACES ))
-	return s_DbgMemAlloc.GetCallStackForIndex( GetAllocationStatIndex_Internal( mem ), pCallStackOut, iMaxEntriesOut );
+	return GetMemoryAllocator()->GetCallStackForIndex( GetAllocationStatIndex_Internal( mem ), pCallStackOut, iMaxEntriesOut );
 #else
 	return 0;
 #endif

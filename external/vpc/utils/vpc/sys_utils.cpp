@@ -30,6 +30,8 @@
 #include <mach-o/dyld.h>
 #endif
 
+#include "tier0/memdbgon.h"
+
 CXMLWriter::CXMLWriter()
 {
 	m_fp = NULL;
@@ -417,6 +419,8 @@ bool Sys_ReplaceString( const char *pStream, const char *pSearch, const char *pR
 	char		*pOut   = pOutBuff;
 	int			len;
 	bool		bReplaced = false;
+	const int replaceLen = strlen( pReplace );
+	const int searchLen = strlen( pSearch );
 
 	while ( 1 )
 	{
@@ -442,12 +446,12 @@ bool Sys_ReplaceString( const char *pStream, const char *pSearch, const char *pR
 		pOut += len;
 
 		// substitute new string
-		len = strlen( pReplace );
+		len = replaceLen;
 		memcpy( pOut, pReplace, len );
 		pOut += len;
 
 		// advance past sub string
-		pStart = pFind + strlen( pSearch );
+		pStart = pFind + searchLen;
 	}
 
 	*pOut = '\0';

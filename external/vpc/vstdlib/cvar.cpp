@@ -249,10 +249,13 @@ ICvar::ICVarIteratorInternal *CCvar::FactoryInternalIterator( void )
 }
 
 //-----------------------------------------------------------------------------
-// Factor for CVars 
+// Factory for CVars 
 //-----------------------------------------------------------------------------
-static CCvar s_Cvar;
-EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CCvar, ICvar, CVAR_INTERFACE_VERSION, s_Cvar );
+static void* CreateCvar() {
+	static CCvar ccvar;
+	return &ccvar;
+}
+EXPOSE_INTERFACE_FN( CreateCvar, ICvar, CVAR_INTERFACE_VERSION );
 
 
 //-----------------------------------------------------------------------------
@@ -521,14 +524,14 @@ void CCvar::RemoveSplitScreenConVars( CVarDLLIdentifier_t id )
 
  
 
-		for ( int i = 1 ; i < m_nMaxSplitScreenSlots; ++i )
+		for ( int j = 1 ; j < m_nMaxSplitScreenSlots; ++j )
 		{
 
-			if ( info.m_Vars[ i - 1 ].m_pVar )
+			if ( info.m_Vars[ j - 1 ].m_pVar )
 			{
-				UnregisterConCommand( info.m_Vars[ i - 1 ].m_pVar );
-				delete info.m_Vars[ i - 1 ].m_pVar;
-				info.m_Vars[ i - 1 ].m_pVar = NULL;
+				UnregisterConCommand( info.m_Vars[ j - 1 ].m_pVar );
+				delete info.m_Vars[ j - 1 ].m_pVar;
+				info.m_Vars[ j - 1 ].m_pVar = NULL;
 			}
 		}
 		deleted.AddToTail( key );
@@ -741,17 +744,17 @@ void CCvar::RevertFlaggedConVars( int nFlag )
 		if ( var->IsCommand() )
 			continue;
 
-		ConVar *cvar = ( ConVar * )var;
+		ConVar *conVar = ( ConVar * )var;
 
-		if ( !cvar->IsFlagSet( nFlag ) )
+		if ( !conVar->IsFlagSet( nFlag ) )
 			continue;
 
 		// It's == to the default value, don't count
-		if ( !V_stricmp( cvar->GetDefault(), cvar->GetString() ) )
+		if ( !V_stricmp( conVar->GetDefault(), conVar->GetString() ) )
 			continue;
 
-		cvar->Revert();
-		// DevMsg( "%s = \"%s\" (reverted)\n", cvar->GetName(), cvar->GetString() );
+		conVar->Revert();
+		// DevMsg( "%s = \"%s\" (reverted)\n", conVar->GetName(), conVar->GetString() );
 	}
 }
 
@@ -1161,15 +1164,13 @@ CConCommandHash::CCommandHashHandle_t CConCommandHash::FastInsert( ConCommandBas
 {
 	// Get a new element from the pool.
 	int iHashData = m_aDataPool.Alloc( true );
-	HashEntry_t * pHashData = &m_aDataPool[iHashData];
-	if ( !pHashData )
-		return InvalidHandle();
+	HashEntry_t &pHashData = m_aDataPool[iHashData];
 
 	HashKey_t key = Hash(cmd);
 
 	// Add data to new element.
-	pHashData->m_uiKey = key;
-	pHashData->m_Data = cmd;
+	pHashData.m_uiKey = key;
+	pHashData.m_Data = cmd;
 
 	// Link element.
 	int iBucket = key & kBUCKETMASK ; // HashFuncs::Hash( uiKey, m_uiBucketMask );

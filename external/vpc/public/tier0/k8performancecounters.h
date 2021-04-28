@@ -88,7 +88,7 @@ public:
 
     unsigned short m_eventMask;
     int event_id;
-    tchar * name;
+    const tchar * name;
     tchar revRequired;
     int eventSelectNum;
     UnitEncode unitEncode;
@@ -117,8 +117,8 @@ public:
         m_eventMask = 0;
         event_id = 0;
         name = 0;
-        revRequired = 'A'; 
-
+        revRequired = 'A';
+        unitEncode = UE_Unknown;
 
     }
 

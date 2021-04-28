@@ -24,6 +24,7 @@ m_threadId( 0 ),
 m_threadZombieId( 0 ) ,
 #endif
 m_result( 0 ),
+m_pStackBase( NULL ),
 m_flags( 0 )
 {
 	m_szName[0] = 0;
@@ -307,8 +308,8 @@ INLINE_ON_PS3 void CThread::Stop(int exitCode)
 			g_pCurThread = NULL;
 
 #ifdef _WIN32
-			CloseHandle( m_hThread );
 			RemoveThreadHandleToIDMap( m_hThread );
+			CloseHandle( m_hThread );
 			m_hThread = NULL;
 #else
 			m_threadId = 0;
@@ -399,8 +400,8 @@ INLINE_ON_PS3 bool CThread::Terminate(int exitCode)
 	// I hope you know what you're doing!
 	if (!TerminateThread(m_hThread, exitCode))
 		return false;
-	CloseHandle( m_hThread );
 	RemoveThreadHandleToIDMap( m_hThread );
+	CloseHandle( m_hThread );
 	m_hThread = NULL;
 #elif defined( _PS3 )
 	m_threadEnd.Set();
@@ -515,7 +516,7 @@ INLINE_ON_PS3 void* CThread::ThreadProc(LPVOID pv)
 #if defined( POSIX ) || defined( _PS3 )
 	ThreadInit_t *pInit = reinterpret_cast<ThreadInit_t*>(pv);
 #else
-	std::auto_ptr<ThreadInit_t> pInit((ThreadInit_t *)pv);
+	std::unique_ptr<ThreadInit_t> pInit((ThreadInit_t *)pv);
 #endif
 
 #ifdef _X360
@@ -594,8 +595,8 @@ INLINE_ON_PS3 void* CThread::ThreadProc(LPVOID pv)
 
 	AUTO_LOCK( pThread->m_Lock );
 #ifdef _WIN32
-	CloseHandle( pThread->m_hThread );
 	RemoveThreadHandleToIDMap( pThread->m_hThread );
+	CloseHandle( pThread->m_hThread );
 	pThread->m_hThread = NULL;
 #elif defined( _PS3 )
 	pThread->m_threadZombieId = pThread->m_threadId;

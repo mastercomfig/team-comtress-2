@@ -331,7 +331,7 @@ static HMODULE Sys_LoadLibraryGuts( const char *pLibraryName )
 static HMODULE Sys_LoadLibrary( const char *pLibraryName )
 {
 	// load a library. If a library suffix is set, look for the library first with that name
-	char *pSuffix = NULL;
+	const char *pSuffix = NULL;
 	
 	if ( CommandLine()->FindParm( "-xlsp" ) )
 	{
@@ -402,8 +402,8 @@ CSysModule *Sys_LoadModule( const char *pModuleName )
 		// PS3's load module *must* be fed extensions. If the extension is missing, add it. 
 		if (!( strstr(pModuleName, ".sprx") || strstr(pModuleName, ".prx") ))
 		{
-			strncpy( alteredFilename, pModuleName, MAX_PATH );
-			strncat( alteredFilename, DLL_EXT_STRING, MAX_PATH );
+			strncpy( alteredFilename, pModuleName, sizeof( alteredFilename ) );
+			strncat( alteredFilename, DLL_EXT_STRING, sizeof( alteredFilename ) );
 			pModuleName = alteredFilename;
 		}
 	}

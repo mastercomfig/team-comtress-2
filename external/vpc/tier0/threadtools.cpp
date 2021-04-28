@@ -72,12 +72,6 @@ bool gbCheckNotMultithreaded = true;
 
 #define DEBUG_ERROR(XX) Assert(0)
 
-// Need to ensure initialized before other clients call in for main thread ID
-#ifdef _WIN32
-#pragma warning(disable:4073)
-#pragma init_seg(lib)
-#endif
-
 #ifdef _WIN32
 ASSERT_INVARIANT(TT_SIZEOF_CRITICALSECTION == sizeof(CRITICAL_SECTION));
 ASSERT_INVARIANT(TT_INFINITE == INFINITE);
@@ -360,7 +354,6 @@ ThreadHandle_t * CreateTestThreads( ThreadFunc_t fnThread, int numThreads, int n
 	pHandles[-1] = (ThreadHandle_t)INT_TO_POINTER( numThreads );
 	for( int i = 0; i < numThreads; ++i )
 	{
-		//TestThreads();
 		ThreadHandle_t hThread;
 		const unsigned int nDefaultStackSize = 64 * 1024; // this stack size is used in case stackSize == 0
 		hThread = CreateSimpleThread( fnThread, INT_TO_POINTER( i ), nDefaultStackSize );
@@ -371,18 +364,6 @@ ThreadHandle_t * CreateTestThreads( ThreadFunc_t fnThread, int numThreads, int n
 			ThreadSetAffinity( hThread, mask );
 		}
 		
-/*		
-		ThreadProcInfoUnion_t info;
-		info.val.pfnThread = fnThread;
-		info.val.pParam = (void*)(i);
-		if ( int nError = sys_ppu_thread_create( &hThread, ThreadProcConvertUnion, info.val64, 1001, nDefaultStackSize, SYS_PPU_THREAD_CREATE_JOINABLE, "SimpleThread" ) != CELL_OK )
-		{
-			printf( "PROBLEM!\n" );
-			Error( "Cannot create thread, error %d\n", nError );
-			return 0;
-		}
-*/
-		//ThreadHandle_t hThread = CreateSimpleThread( fnThread, (void*)i );
 		pHandles[i] = hThread;
 	}
 //	printf("Finishinged CreateTestThreads(%p,%d)\n", (void*)fnThread,  numThreads );
@@ -444,8 +425,8 @@ ThreadHandle_t CreateSimpleThread( ThreadFunc_t pfnThread, void *pParam, unsigne
 bool ReleaseThreadHandle( ThreadHandle_t hThread )
 {
 #ifdef _WIN32
-	bool bRetVal = ( CloseHandle( hThread ) != 0 );
 	RemoveThreadHandleToIDMap( (HANDLE)hThread );
+	bool bRetVal = ( CloseHandle( hThread ) != 0 );
 	return bRetVal;
 #else
 	return true;
@@ -688,7 +669,7 @@ void ThreadSetDebugName( ThreadHandle_t hThread, const char *pszName )
 			{
 				RaiseException(MS_VC_EXCEPTION, 0, sizeof(info) / sizeof(DWORD), (ULONG_PTR *)&info);
 			}
-			__except (EXCEPTION_CONTINUE_EXECUTION)
+			__except (EXCEPTION_EXECUTE_HANDLER)
 			{
 			}
 		}
@@ -2601,6 +2582,7 @@ PLATFORM_INTERFACE void SetCurThreadPS3( CThread *pThread )
 	g_pCurThread = pThread;
 }
 #else
+#include <memory>
 // The CThread implementation needs to be inlined for performance on the PS3 - It makes a difference of more than 1ms/frame
 // for other platforms, we include the .inl in the .cpp file where it existed before
 #include "../public/tier0/threadtools.inl"

@@ -24,11 +24,6 @@
 #include "utlmap.h"
 #include "tier0/memdbgon.h"
 
-#ifdef _WIN32
-#pragma warning(disable:4073)
-#pragma init_seg(lib)
-#endif
-
 static volatile bool bSpewAllocations = false; // TODO: Register CMemoryStacks with g_pMemAlloc, so it can spew a summary
 
 //-----------------------------------------------------------------------------
@@ -51,7 +46,8 @@ CMemoryStack::CMemoryStack()
 	#endif
 #endif
  	m_maxSize( 0 ),
-	m_bRegisteredAllocation( false )
+	m_bRegisteredAllocation( false ),
+	m_bPhysical( false )
 {
 	m_pszAllocOwner = strdup( "CMemoryStack unattributed" );
 }
@@ -124,7 +120,7 @@ bool CMemoryStack::Init( const char *pszAllocOwner, unsigned maxSize, unsigned c
 #ifdef _WIN32
 	m_pBase = (unsigned char *)VirtualAlloc( NULL, m_maxSize, VA_RESERVE_FLAGS, PAGE_NOACCESS );
 #else
-	m_pVirtualMemorySection = g_pMemAlloc->AllocateVirtualMemorySection( m_maxSize );
+	m_pVirtualMemorySection = GetMemoryAllocator()->AllocateVirtualMemorySection( m_maxSize );
 	if ( !m_pVirtualMemorySection )
 	{
 		Warning( "AllocateVirtualMemorySection failed( size=%d )\n", m_maxSize );
@@ -139,7 +135,7 @@ bool CMemoryStack::Init( const char *pszAllocOwner, unsigned maxSize, unsigned c
 	if ( !m_pBase )
 	{
 #if !defined( NO_MALLOC_OVERRIDE )
-		g_pMemAlloc->OutOfMemory();
+		GetMemoryAllocator()->OutOfMemory();
 #endif
 		return false;
 	}
@@ -159,7 +155,7 @@ bool CMemoryStack::Init( const char *pszAllocOwner, unsigned maxSize, unsigned c
 		if ( !bInitialCommitSucceeded )
 		{
 #if !defined( NO_MALLOC_OVERRIDE )
-			g_pMemAlloc->OutOfMemory( initialCommit );
+			GetMemoryAllocator()->OutOfMemory( initialCommit );
 #endif
 			return false;
 		}
@@ -304,7 +300,7 @@ bool CMemoryStack::CommitTo( byte *pNextAlloc ) RESTRICT
 		if ( !bAllocationSucceeded )
 		{
 #if !defined( NO_MALLOC_OVERRIDE )
-			g_pMemAlloc->OutOfMemory( commitSize );
+			GetMemoryAllocator()->OutOfMemory( commitSize );
 #endif
 			return false;
 		}
@@ -500,7 +496,7 @@ bool CPhysicalMemoryStack::Init( size_t nChunkSizeInBytes, size_t nAlignment, in
 	if ( !m_InitialChunk.m_pBase )
 	{
 		m_InitialChunk.m_pNextAlloc = m_InitialChunk.m_pAllocLimit = NULL;
-		g_pMemAlloc->OutOfMemory();
+		GetMemoryAllocator()->OutOfMemory();
 		return false;
 	}
 
@@ -579,7 +575,7 @@ void *CPhysicalMemoryStack::AllocFromOverflow( size_t nSizeInBytes )
 	{
 		chunk.m_pNextAlloc = chunk.m_pAllocLimit = NULL;
 		m_pLastAllocedChunk = NULL;
-		g_pMemAlloc->OutOfMemory();
+		GetMemoryAllocator()->OutOfMemory();
 		return NULL;
 	}
 	MemAlloc_RegisterExternalAllocation( CPhysicalMemoryStack, chunk.m_pBase, XPhysicalSize( chunk.m_pBase ) );

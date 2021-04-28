@@ -101,6 +101,7 @@ CCommandLine::CCommandLine( void )
 {
 	m_pszCmdLine = NULL;
 	m_nParmCount = 0;
+	m_ppParms[0] = NULL;
 }
 
 //-----------------------------------------------------------------------------
@@ -152,8 +153,7 @@ void CCommandLine::LoadParametersFromFile( const char *&pSrc, char *&pDst, intp 
 	FILE *fp = fopen( szFileName, "r" );
 	if ( fp )
 	{
-		char c;
-		c = (char)fgetc( fp );
+		int c = fgetc( fp );
 		while ( c != EOF )
 		{
 			// Turn return characters into spaces
@@ -167,7 +167,7 @@ void CCommandLine::LoadParametersFromFile( const char *&pSrc, char *&pDst, intp 
 				break;
 
 			// Get the next character, if there are more
-			c = (char)fgetc( fp );
+			c = fgetc( fp );
 		}
 	
 		// Add a terminating space character
@@ -210,12 +210,10 @@ void CCommandLine::CreateCmdLine( int argc, char **argv )
 //-----------------------------------------------------------------------------
 void CCommandLine::CreateCmdLine( const char *commandline )
 {
-	if ( m_pszCmdLine )
-	{
-		delete[] m_pszCmdLine;
-	}
+	delete[] m_pszCmdLine;
 
 	char szFull[ 4096 ];
+	szFull[0] = '\0';
 
 	char *pDst = szFull;
 	const char *pSrc = commandline;
@@ -335,6 +333,7 @@ void CCommandLine::RemoveParm( const char *pszParm )
 	char *pnextparam;
 	intp n;
 	size_t curlen;
+	const size_t paramLen = strlen( pszParm );
 
 	p = m_pszCmdLine;
 	while ( *p )
@@ -353,7 +352,7 @@ void CCommandLine::RemoveParm( const char *pszParm )
 		while ( pnextparam && *pnextparam && (*pnextparam != ' ') && (*pnextparam != '\"') )
 			pnextparam++;
 
-		if ( pnextparam && ( static_cast<size_t>( pnextparam - found ) > strlen( pszParm ) ) )
+		if ( pnextparam && ( static_cast<size_t>( pnextparam - found ) > paramLen ) )
 		{
 			p = pnextparam;
 			continue;
@@ -503,7 +502,10 @@ void CCommandLine::AddArgument( const char *pFirst, const char *pLast )
 		return;
 
 	if ( m_nParmCount >= MAX_PARAMETERS )
+	{
 		Error( "CCommandLine::AddArgument: exceeded %d parameters", MAX_PARAMETERS );
+		return;
+	}
 
 	size_t nLen = ( pLast - pFirst ) + 1;
 	m_ppParms[m_nParmCount] = new char[nLen];
@@ -623,8 +625,7 @@ void CCommandLine::SetParm( int nIndex, char const *pParm )
 		Assert( (nIndex >= 0) && (nIndex < m_nParmCount) );
 		if ( (nIndex >= 0) && (nIndex < m_nParmCount) )
 		{
-			if ( m_ppParms[nIndex] )
-				delete[] m_ppParms[nIndex];
+			delete[] m_ppParms[nIndex];
 			m_ppParms[nIndex] = strdup( pParm );
 		}
 

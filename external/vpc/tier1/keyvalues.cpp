@@ -41,7 +41,7 @@
 // confusing effects.
 //////////////////////////////////
 
-static char * s_LastFileLoadingFrom = "unknown"; // just needed for error messages
+static const char *s_LastFileLoadingFrom = "unknown"; // just needed for error messages
 
 // Statics for the growable string table
 int (*KeyValues::s_pfGetSymbolForString)( const char *name, bool bCreate ) = &KeyValues::GetSymbolForStringClassic;
@@ -444,6 +444,8 @@ void KeyValues::Init()
 	m_pPeer = NULL;
 	m_pChain = NULL;
 
+	m_pExpressionGetSymbolProc = NULL;
+
 	m_sValue = NULL;
 	m_wsValue = NULL;
 	m_pValue = NULL;
@@ -533,7 +535,6 @@ int KeyValues::GetNameSymbolCaseSensitive() const
 //-----------------------------------------------------------------------------
 // Purpose: Read a single token from buffer (0 terminated)
 //-----------------------------------------------------------------------------
-#pragma warning (disable:4706)
 const char *KeyValues::ReadToken( CUtlBuffer &buf, bool &wasQuoted, bool &wasConditional )
 {
 	wasQuoted = false;
@@ -580,22 +581,22 @@ const char *KeyValues::ReadToken( CUtlBuffer &buf, bool &wasQuoted, bool &wasCon
 	bool bReportedError = false;
 	bool bConditionalStart = false;
 	int nCount = 0;
-	while ( c = (const char*)buf.PeekGet( sizeof(char), 0 ) )
+	while ( const char *v = (const char*)buf.PeekGet( sizeof(char), 0 ) )
 	{
 		// end of file
-		if ( *c == 0 )
+		if ( *v == 0 )
 			break;
 
 		// break if any control character appears in non quoted tokens
-		if ( *c == '"' || *c == '{' || *c == '}' )
+		if ( *v == '"' || *v == '{' || *v == '}' )
 			break;
 
-		if ( *c == '[' )
+		if ( *v == '[' )
 		{
 			bConditionalStart = true;
 		}
 
-		if ( *c == ']' && bConditionalStart )
+		if ( *v == ']' && bConditionalStart )
 		{
 			bConditionalStart = false;
 			wasConditional = true;
@@ -603,12 +604,12 @@ const char *KeyValues::ReadToken( CUtlBuffer &buf, bool &wasQuoted, bool &wasCon
 
 		// conditionals need to get tokenized as delimited by []
 		// othwerwise break on whitespace
-		if ( V_isspace(*c) && !bConditionalStart )
+		if ( V_isspace(*v) && !bConditionalStart )
 			break;
 
 		if (nCount < (KEYVALUES_TOKEN_SIZE-1) )
 		{
-			s_pTokenBuf[nCount++] = *c;	// add char to buffer
+			s_pTokenBuf[nCount++] = *v;	// add char to buffer
 		}
 		else if ( !bReportedError )
 		{
@@ -621,7 +622,6 @@ const char *KeyValues::ReadToken( CUtlBuffer &buf, bool &wasQuoted, bool &wasCon
 	s_pTokenBuf[ nCount ] = 0;
 	return s_pTokenBuf;
 }
-#pragma warning (default:4706)
 
 	
 
@@ -1328,13 +1328,13 @@ uint64 KeyValues::GetUint64( const char *keyName, uint64 defaultValue )
 		case TYPE_STRING:
 			{
 				uint64 uiResult = 0ull;
-				sscanf( dat->m_sValue, "%lld", &uiResult );
+				sscanf( dat->m_sValue, "%llu", &uiResult );
 				return uiResult;
 			}
 		case TYPE_WSTRING:
 			{
 				uint64 uiResult = 0ull;
-				swscanf( dat->m_wsValue, L"%lld", &uiResult );
+				swscanf( dat->m_wsValue, L"%llu", &uiResult );
 				return uiResult;
 			}
 		case TYPE_FLOAT:
@@ -1483,7 +1483,7 @@ const wchar_t *KeyValues::GetWString( const char *keyName, const wchar_t *defaul
 			break;
 		case TYPE_UINT64:
 			{
-				swprintf( wbuf, V_ARRAYSIZE(wbuf), L"%lld", *((uint64 *)(dat->m_sValue)) );
+				swprintf( wbuf, V_ARRAYSIZE(wbuf), L"%llu", *((uint64 *)(dat->m_sValue)) );
 				SetWString( keyName, wbuf );
 			}
 			break;
@@ -1999,9 +1999,8 @@ void KeyValues::ParseIncludedKeys( char const *resourceName, const char *filetoi
 	V_strncpy( fullpath, resourceName, sizeof( fullpath ) );
 
 	// Strip off characters back to start or first /
-	bool done = false;
 	int len = V_strlen( fullpath );
-	while ( !done )
+	while ( true )
 	{
 		if ( len <= 0 )
 		{
@@ -2729,8 +2728,8 @@ bool KeyValues::ReadAsBinaryPooledFormat( CUtlBuffer &buffer, IBaseFileSystem *p
 
 		case TYPE_STRING:
 			{
-				unsigned int stringKey = buffer.GetUnsignedInt();
-				if ( !((IFileSystem*)pFileSystem)->GetStringFromKVPool( poolKey, stringKey, token, sizeof( token ) ) )
+				unsigned int stringKeyI = buffer.GetUnsignedInt();
+				if ( !((IFileSystem*)pFileSystem)->GetStringFromKVPool( poolKey, stringKeyI, token, sizeof( token ) ) )
 					return false;
 				int len = V_strlen( token );
 				dat->m_sValue = new char[len + 1];

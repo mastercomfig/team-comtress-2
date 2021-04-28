@@ -194,7 +194,7 @@ int _V_wcscmp (const wchar_t *s1, const wchar_t *s2)
 
 
 
-#define TOLOWERC( x )  (( ( x >= 'A' ) && ( x <= 'Z' ) )?( x + 32 ) : x )
+#define TOLOWERC( x )  (( ( (x) >= 'A' ) && ( (x) <= 'Z' ) )?( (x) + 32 ) : (x) )
 int	_V_stricmp( const char *s1, const char *s2 )
 {
 	VPROF_2( "V_stricmp", VPROF_BUDGETGROUP_OTHER_UNACCOUNTED, false, BUDGETFLAG_ALL );
@@ -1127,10 +1127,10 @@ char *V_pretifymem( float value, int digitsafterdecimal /*= 2*/, bool usebinaryo
 	char *o = out;
 
 	// Search for decimal or if it was integral, find the space after the raw number
-	char *dot = strstr( i, "." );
+	char *dot = strchr( i, '.' );
 	if ( !dot )
 	{
-		dot = strstr( i, " " );
+		dot = strchr( i, ' ' );
 	}
 
 	// Compute position of dot
@@ -1190,10 +1190,10 @@ char *V_pretifynum( int64 value )
 	}
 
 	// Render quadrillions
-	if ( value >= 1000000000000ll )
+	if ( value >= 1000000000000000ll )
 	{
 		char *pchRender = out + V_strlen( out );
-		V_snprintf( pchRender, 32, "%d,", ( int ) ( value / 1000000000000ll ) );
+		V_snprintf( pchRender, 32, "%d,", ( int ) ( value / 1000000000000000ll ) );
 	}
 
 	// Render trillions

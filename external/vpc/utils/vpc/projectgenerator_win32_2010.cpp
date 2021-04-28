@@ -6,6 +6,8 @@
 
 #include "vpc.h"
 
+#include "tier0/memdbgon.h"
+
 #undef PROPERTYNAME
 #define PROPERTYNAME( X, Y ) { X##_##Y, #X, #Y },
 static PropertyName_t s_Win32PropertyNames_2010[] =
@@ -387,7 +389,7 @@ bool CProjectGenerator_Win32_2010::WritePrimaryXML( const char *pOutputFilename 
 
 bool CProjectGenerator_Win32_2010::WriteFolderToSecondaryXML( CProjectFolder *pFolder, const char *pParentPath )
 {
-	CUtlString parentPath = CFmtStr( "%s%s%s", pParentPath, pParentPath[0] ? "\\" : "", pFolder->m_Name.Get() );
+	CUtlString parentPath = CUtlString{ CFmtStr( "%s%s%s", pParentPath, pParentPath[0] ? "\\" : "", pFolder->m_Name.Get() ) };
 
 	MD5Context_t ctx;
 	unsigned char digest[MD5_DIGEST_LENGTH];
@@ -574,36 +576,33 @@ bool CProjectGenerator_Win32_2010::WriteProperty( const PropertyState_t *pProper
 		pCondition = conditionString.Get();
 	}
 
-	if ( pPropertyState )
+	switch ( pPropertyState->m_pToolProperty->m_nType )
 	{
-		switch ( pPropertyState->m_pToolProperty->m_nType )
+	case PT_BOOLEAN:
 		{
-		case PT_BOOLEAN:
+			bool bEnabled = Sys_StringToBool( pPropertyState->m_StringValue.Get() );
+			if ( pPropertyState->m_pToolProperty->m_bInvertOutput )
 			{
-				bool bEnabled = Sys_StringToBool( pPropertyState->m_StringValue.Get() );
-				if ( pPropertyState->m_pToolProperty->m_bInvertOutput )
-				{
-					bEnabled ^= 1;
-				}
-				m_XMLWriter.WriteLineNode( pOutputName, pCondition, bEnabled ? "true" : "false" );
+				bEnabled ^= 1;
 			}
-			break;
-
-		case PT_STRING:
-			m_XMLWriter.WriteLineNode( pOutputName, pCondition, m_XMLWriter.FixupXMLString( pPropertyState->m_StringValue.Get() ) );
-			break;
-
-		case PT_LIST:
-		case PT_INTEGER:
-			m_XMLWriter.WriteLineNode( pOutputName, pCondition, pPropertyState->m_StringValue.Get() );
-			break;
-
-		case PT_IGNORE:
-			break;
-
-		default:
-			g_pVPC->VPCError( "CProjectGenerator_Win32_2010: WriteProperty, %s - not implemented", pOutputName );
+			m_XMLWriter.WriteLineNode( pOutputName, pCondition, bEnabled ? "true" : "false" );
 		}
+		break;
+
+	case PT_STRING:
+		m_XMLWriter.WriteLineNode( pOutputName, pCondition, m_XMLWriter.FixupXMLString( pPropertyState->m_StringValue.Get() ) );
+		break;
+
+	case PT_LIST:
+	case PT_INTEGER:
+		m_XMLWriter.WriteLineNode( pOutputName, pCondition, pPropertyState->m_StringValue.Get() );
+		break;
+
+	case PT_IGNORE:
+		break;
+
+	default:
+		g_pVPC->VPCError( "CProjectGenerator_Win32_2010: WriteProperty, %s - not implemented", pOutputName );
 	}
 
 	return true;

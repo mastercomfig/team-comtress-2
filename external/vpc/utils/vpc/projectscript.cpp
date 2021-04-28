@@ -9,6 +9,8 @@
 #include "tier1/keyvalues.h"
 #include "baseprojectdatacollector.h"
 
+#include "tier0/memdbgon.h"
+
 #ifndef STEAM
  bool V_StrSubstInPlace( char *pchInOut, int cchInOut, const char *pMatch, const char *pReplaceWith, bool bCaseSensitive )
 {
@@ -423,9 +425,9 @@ void VPC_Keyword_AddFile( const char *pFileFlag = NULL, const folderConfig_t *pF
 		g_pVPC->GetProjectGenerator()->StartFile( pExcludedFilename, true );
 		CUtlVector< CUtlString > configurationNames;
 		g_pVPC->GetProjectGenerator()->GetAllConfigurationNames( configurationNames );
-		for ( int i=0; i < configurationNames.Count(); i++ )
+		for ( int j=0; j < configurationNames.Count(); j++ )
 		{
-			g_pVPC->GetProjectGenerator()->StartConfigurationBlock( configurationNames[i].String(), true );
+			g_pVPC->GetProjectGenerator()->StartConfigurationBlock( configurationNames[j].String(), true );
 			g_pVPC->GetProjectGenerator()->FileExcludedFromBuild( true );
 			g_pVPC->GetProjectGenerator()->EndConfigurationBlock();
 		}
@@ -456,9 +458,9 @@ void VPC_Keyword_AddFile( const char *pFileFlag = NULL, const folderConfig_t *pF
 			char rgchRejectList[4096]; rgchRejectList[0]='\0';
 			if ( vecExcludedFiles.Count() )
 			{
-				for ( int i=0; i<files.Count(); i++ )
+				for ( int j=0; j<files.Count(); j++ )
 				{
-							V_strncat( rgchRejectList, files[i].String(), V_ARRAYSIZE( rgchRejectList ) );
+							V_strncat( rgchRejectList, files[j].String(), V_ARRAYSIZE( rgchRejectList ) );
 							V_strncat( rgchRejectList, ",", V_ARRAYSIZE( rgchRejectList ) );
 				}
 			}
@@ -478,15 +480,15 @@ void VPC_Keyword_AddFile( const char *pFileFlag = NULL, const folderConfig_t *pF
 				{
 					pExcludedExtension = "";
 				}
-				if ( pExcludedExtension && !V_stricmp( pExcludedExtension, "cpp" ) )
+				if ( !V_stricmp( pExcludedExtension, "cpp" ) )
 				{
 					g_pVPC->VPCStatus( false, "excluding '%s' from build", pExcludedFilename );
 					g_pVPC->GetProjectGenerator()->StartFile( pExcludedFilename, true ); 
 					CUtlVector< CUtlString > configurationNames;
  					g_pVPC->GetProjectGenerator()->GetAllConfigurationNames( configurationNames );
-					for ( int i=0; i < configurationNames.Count(); i++ )
+					for ( int j=0; j < configurationNames.Count(); j++ )
 					{
-						g_pVPC->GetProjectGenerator()->StartConfigurationBlock( configurationNames[i].String(), true );
+						g_pVPC->GetProjectGenerator()->StartConfigurationBlock( configurationNames[j].String(), true );
 						g_pVPC->GetProjectGenerator()->FileExcludedFromBuild( true );
 						g_pVPC->GetProjectGenerator()->EndConfigurationBlock();
 					}
@@ -503,9 +505,9 @@ void VPC_Keyword_AddFile( const char *pFileFlag = NULL, const folderConfig_t *pF
 		{
 			CUtlVector< CUtlString > configurationNames;
 			g_pVPC->GetProjectGenerator()->GetAllConfigurationNames( configurationNames );
-			for ( int i=0; i < configurationNames.Count(); i++ )
+			for ( int j=0; j < configurationNames.Count(); j++ )
 			{
-				g_pVPC->GetProjectGenerator()->StartConfigurationBlock( configurationNames[i].String(), true );
+				g_pVPC->GetProjectGenerator()->StartConfigurationBlock( configurationNames[j].String(), true );
 				g_pVPC->GetProjectGenerator()->FileIsDynamic( true );
 				g_pVPC->GetProjectGenerator()->EndConfigurationBlock();
 			}
@@ -543,9 +545,9 @@ void VPC_Keyword_AddFile( const char *pFileFlag = NULL, const folderConfig_t *pF
 			g_pVPC->VPCStatus( false, "Unity: excluding '%s' from build", pFilename );
 			CUtlVector< CUtlString > configurationNames;
  			g_pVPC->GetProjectGenerator()->GetAllConfigurationNames( configurationNames );
-			for ( int i=0; i < configurationNames.Count(); i++ )
+			for ( int j=0; j < configurationNames.Count(); j++ )
 			{
-				g_pVPC->GetProjectGenerator()->StartConfigurationBlock( configurationNames[i].String(), true );
+				g_pVPC->GetProjectGenerator()->StartConfigurationBlock( configurationNames[j].String(), true );
 				g_pVPC->GetProjectGenerator()->FileExcludedFromBuild( true );
 				g_pVPC->GetProjectGenerator()->EndConfigurationBlock();
 			}
@@ -1423,7 +1425,7 @@ void Internal_LoadAddressMacroAuto( bool bPad )
 			{
 				continue;
 			}
-			if ( strstr( szLength, "." ) )
+			if ( strchr( szLength, '.' ) )
 			{
 				// assume float format
 				float fLength = 0;
@@ -1432,7 +1434,7 @@ void Internal_LoadAddressMacroAuto( bool bPad )
 			}
 			else
 			{
-				sscanf( szLength, "%d", &dllLength );
+				sscanf( szLength, "%u", &dllLength );
 			}
 
 			if ( !bPad )
@@ -1622,7 +1624,7 @@ void VPC_PrepareToReadScript( const char *pInputScriptName, int depth, bool bQui
 
 	g_pVPC->AddScriptToCRCCheck( szScriptName, CRC32_ProcessSingleBuffer( pScriptBuffer, scriptLen ) );
 
-	delete pScriptBuffer;
+	delete[] pScriptBuffer;
 	Sys_LoadTextFileWithIncludes( szScriptName, &pScriptBuffer, false );
 
 	g_pVPC->GetScript().PushScript( szScriptName, pScriptBuffer );
@@ -1680,7 +1682,7 @@ void VPC_HandleIncludeStatement( int depth, bool bQuiet, void (*CallbackFn)( con
 		VPC_AddCurrentVPCScriptToProjectFolder( false );
 
 		CallbackFn( szBigBuffer, depth+1, bQuiet );
-		free( pScriptBuffer );
+		delete[] pScriptBuffer;
 		
 		// restore state
 		g_pVPC->GetScript().PopScript();
@@ -1760,25 +1762,25 @@ void WriteCRCCheckFile( const char *pVCProjFilename )
 
 	fprintf( fp, "%s\n", VPCCRCCHECK_FILE_VERSION_STRING );
 	// add the executable crc
-			char vpcExeAbsPath[MAX_PATH]; vpcExeAbsPath[0] = '\0';
+	char vpcExeAbsPath[MAX_PATH]; vpcExeAbsPath[0] = '\0';
 	CRC32_t nCRCFromFileContents = 0;
-			if ( Sys_GetExecutablePath( vpcExeAbsPath, sizeof( vpcExeAbsPath ) ) )
+	if ( Sys_GetExecutablePath( vpcExeAbsPath, sizeof( vpcExeAbsPath ) ) )
 	{
 		char *pBuffer;
-				int cbVPCExe = Sys_LoadFile( vpcExeAbsPath, (void**)&pBuffer );
+		int cbVPCExe = Sys_LoadFile( vpcExeAbsPath, (void**)&pBuffer );
 
 		// Calculate the CRC from the contents of the file.
 		nCRCFromFileContents = CRC32_ProcessSingleBuffer( pBuffer, cbVPCExe );
-		delete [] pBuffer;
+		free( pBuffer );
 	}
 
-			const char *vpcExePath = vpcExeAbsPath;
+	const char *vpcExePath = vpcExeAbsPath;
 
-			char vpcExeRelPath[MAX_PATH]; vpcExeRelPath[0] = '\0';
-			if ( V_MakeRelativePath( vpcExeAbsPath, g_pVPC->GetProjectPath(), vpcExeRelPath, sizeof( vpcExeRelPath ) ) )
-			{
-				vpcExePath = vpcExeRelPath;
-			}
+	char vpcExeRelPath[MAX_PATH]; vpcExeRelPath[0] = '\0';
+	if ( V_MakeRelativePath( vpcExeAbsPath, g_pVPC->GetProjectPath(), vpcExeRelPath, sizeof( vpcExeRelPath ) ) )
+	{
+		vpcExePath = vpcExeRelPath;
+	}
 
 	fprintf( fp, "%8.8x %s\n", ( unsigned int ) nCRCFromFileContents, vpcExePath );
 
@@ -2133,7 +2135,7 @@ bool CVPC::ParseProjectScript( const char *pScriptName, int depth, bool bQuiet, 
 
 	VPC_ParseProjectScriptParameters( szScriptName, depth, bQuiet );
 
-	free( pScriptBuffer );
+	delete [] pScriptBuffer;
 
 	// for safety, force callers to restore to proper state
 	g_pVPC->GetScript().PopScript();

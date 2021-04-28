@@ -192,8 +192,15 @@ void Plat_GetTimeString( struct tm *pTime, char *pOut, int nMaxBytes )
 	g_LocalTimeMutex.Lock();
 
 	char *pStr = asctime( pTime );
-	strncpy( pOut, pStr, nMaxBytes );
-	pOut[nMaxBytes-1] = 0;
+	if ( pStr )
+	{
+		strncpy(pOut, pStr, nMaxBytes);
+		pOut[nMaxBytes - 1] = '\0';
+	}
+	else
+	{
+		pOut[0] = '\0';
+	}
 
 	g_LocalTimeMutex.Unlock();
 }
@@ -397,8 +404,7 @@ void Plat_MessageBox( const char *pTitle, const char *pMessage )
 PlatOSVersion_t Plat_GetOSVersion()
 {
 #ifdef PLATFORM_WINDOWS_PC
-	OSVERSIONINFO info;
-	info.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+	OSVERSIONINFO info = { sizeof(OSVERSIONINFO) };
 	if ( GetVersionEx( &info ) )
 		return (PlatOSVersion_t)info.dwMajorVersion;
 	return PLAT_OS_VERSION_UNKNOWN;
@@ -516,7 +522,7 @@ PLATFORM_INTERFACE void* Plat_Realloc( void *ptr, unsigned long size )
 {
 	EnterCriticalSection( &g_AllocCS );
 #if !defined(STEAM) && !defined(NO_MALLOC_OVERRIDE)
-		void *pRet = g_pMemAlloc->Realloc( ptr, size );
+		void *pRet = GetMemoryAllocator()->Realloc( ptr, size );
 #else
 		void *pRet = realloc( ptr, size );
 #endif
@@ -539,7 +545,7 @@ PLATFORM_INTERFACE void Plat_Free( void *ptr )
 {
 	EnterCriticalSection( &g_AllocCS );
 #if !defined(STEAM) && !defined(NO_MALLOC_OVERRIDE)
-		g_pMemAlloc->Free( ptr );
+		GetMemoryAllocator()->Free( ptr );
 #else
 		free( ptr );
 #endif

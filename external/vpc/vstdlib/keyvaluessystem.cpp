@@ -150,11 +150,10 @@ private:
 //-----------------------------------------------------------------------------
 // Instance singleton and expose interface to rest of code
 //-----------------------------------------------------------------------------
-static CKeyValuesSystem g_KeyValuesSystem;
-
 IKeyValuesSystem *KeyValuesSystem()
 {
-	return &g_KeyValuesSystem;
+	static CKeyValuesSystem keyValuesSystem;
+	return &keyValuesSystem;
 }
 
 //-----------------------------------------------------------------------------
@@ -285,6 +284,7 @@ HKeySymbol CKeyValuesSystem::GetSymbolForString( const char *name, bool bCreate 
 	int hash = CaseInsensitiveHash(name, m_HashTable.Count());
 	int i = 0;
 	hash_item_t *item = &m_HashTable[hash];
+	const int numStringBytes = strlen(name);
 	while (1)
 	{
 		if (!stricmp(name, (char *)m_Strings.GetBase() + item->stringIndex ))
@@ -312,7 +312,6 @@ HKeySymbol CKeyValuesSystem::GetSymbolForString( const char *name, bool bCreate 
 
 			// build up the new item
 			item->next = NULL;
-			int numStringBytes = strlen(name);
 			char *pString = (char *)m_Strings.Alloc( numStringBytes + 1 + 3 );
 			if ( !pString )
 			{
@@ -332,6 +331,8 @@ HKeySymbol CKeyValuesSystem::GetSymbolForString( const char *name, bool bCreate 
 	Assert(0);
 	return (-1);
 }
+
+extern int	_V_stricmp_NegativeForUnequal(const char* s1, const char* s2);
 
 //-----------------------------------------------------------------------------
 // Purpose: symbol table access (used for key names)
@@ -370,8 +371,8 @@ HKeySymbol CKeyValuesSystem::GetSymbolForStringCaseSensitive( HKeySymbol &hCaseI
 			while ( int nAlternativeStringIndex = MEM_4BYTES_FROM_0_AND_3BYTES( *pnCaseResolveIndex ) )
 			{
 				pCompareString = (char *)m_Strings.GetBase() + nAlternativeStringIndex;
-				int iResult = strcmp( name, pCompareString );
-				if ( !iResult )
+				int r = strcmp( name, pCompareString );
+				if ( !r )
 				{
 					// found an exact match
 					return (HKeySymbol)nAlternativeStringIndex;
@@ -407,6 +408,7 @@ HKeySymbol CKeyValuesSystem::GetSymbolForStringCaseSensitive( HKeySymbol &hCaseI
 
 		i++;
 
+		const int numStringBytes = strlen(name);
 		if (item->next == NULL)
 		{
 			if ( !bCreate )
@@ -425,7 +427,6 @@ HKeySymbol CKeyValuesSystem::GetSymbolForStringCaseSensitive( HKeySymbol &hCaseI
 
 			// build up the new item
 			item->next = NULL;
-			int numStringBytes = strlen(name);
 			char *pString = (char *)m_Strings.Alloc( numStringBytes + 1 + 3 );
 			if ( !pString )
 			{

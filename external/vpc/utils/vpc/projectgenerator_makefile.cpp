@@ -9,6 +9,8 @@
 #include "tier1/utlstack.h"
 #include "projectgenerator_codelite.h"
 
+#include "tier0/memdbgon.h"
+
 static const char *k_pszBase_Makefile = "$(SRCROOT)/devtools/makefile_base_posix.mak";
 
 static const char *g_pOption_BufferSecurityCheck = "$BufferSecurityCheck";
@@ -108,7 +110,7 @@ void V_MakeAbsoluteCygwinPath( char *pOut, int outLen, const char *pRelativePath
 static const char* UsePOSIXSlashes( const char *pStr )
 {
     int len = V_strlen( pStr ) + 2;
-    char *str = (char*)malloc(len*sizeof(char));
+    char *str = (char*)calloc(len, sizeof(char));
     V_strncpy( str, pStr, len );
     for ( int i = 0; i < len; i++ )
     {
@@ -236,6 +238,7 @@ public:
 
   CProjectGenerator_Makefile() : BaseClass( &g_RelevantPropertyNames )
   {
+    m_bForceLowerCaseFileName = false;
   }
 
   virtual void Setup()
@@ -251,10 +254,10 @@ public:
   {
     const char *pMakefileFilename = g_pVPC->GetOutputFilename();
 
-    CUtlString strProjectName = GetProjectName();
     bool bProjectIsCurrent = g_pVPC->IsProjectCurrent( pMakefileFilename, false );
     if ( g_pVPC->IsForceGenerate() || !bProjectIsCurrent )
     {
+      CUtlString strProjectName = GetProjectName();
       g_pVPC->VPCStatus( true, "Saving makefile project for: '%s' File: '%s'", strProjectName.String(), g_pVPC->GetOutputFilename() );
       WriteMakefile( pMakefileFilename );
     }
@@ -563,13 +566,16 @@ public:
     char szFixedOutputFile[MAX_PATH];
     V_strncpy( szFixedOutputFile, pKV->GetString( g_pOption_OutputFile ), sizeof( szFixedOutputFile ) );
     V_FixSlashes( szFixedOutputFile, '/' );
-    // This file uses a custom build step.
-    char sFormattedOutputFile[MAX_PATH];
-    char szAbsPath[MAX_PATH];
-    V_MakeAbsolutePath( szAbsPath, sizeof(szAbsPath), szFixedOutputFile );
-    DoStandardVisualStudioReplacements( szFixedOutputFile, szAbsPath, sFormattedOutputFile, sizeof( sFormattedOutputFile ) );
 
-    fprintf( fp, "OUTPUTFILE=%s\n", sFormattedOutputFile );
+    char szOutputAbsPath[MAX_PATH];
+    {
+      // This file uses a custom build step.
+      char sFormattedOutputFile[MAX_PATH];
+      V_MakeAbsolutePath( szOutputAbsPath, sizeof(szOutputAbsPath), szFixedOutputFile );
+      DoStandardVisualStudioReplacements( szFixedOutputFile, szOutputAbsPath, sFormattedOutputFile, sizeof( sFormattedOutputFile ) );
+
+      fprintf( fp, "OUTPUTFILE=%s\n", sFormattedOutputFile );
+    }
 
     fprintf( fp, "\n\n" );
 
@@ -600,14 +606,16 @@ public:
     V_RemoveDotSlashes( sImportLibraryFile );
 
     char sOutputFile[MAX_PATH];
-    const char *pOutputFile = pKV->GetString( g_pOption_OutputFile, "" );
-    V_strncpy( sOutputFile, UsePOSIXSlashes( pOutputFile ), sizeof( sOutputFile ) );
+    {
+      const char* pOutputFile = pKV->GetString(g_pOption_OutputFile, "");
+      V_strncpy(sOutputFile, UsePOSIXSlashes(pOutputFile), sizeof(sOutputFile));
+    }
     V_RemoveDotSlashes( sOutputFile );
 
     fprintf( fp, "LIBFILES = \\\n" );
 
     // Get original order the link files were specified in the .vpc files. See:
-    //  http://stackoverflow.com/questions/45135/linker-order-gcc
+    //  https://stackoverflow.com/questions/45135/why-does-the-order-in-which-libraries-are-linked-sometimes-cause-errors-in-gcc
     // TL;DR. Gcc does a single pass through the list of libraries to resolve references.
     //  If library A depends on symbols in library B, library A should appear first so we
     //  need to restore the original order to allow users to control link order via
@@ -732,15 +740,15 @@ public:
 
         // This file uses a custom build step.
         char sFormattedOutputFile[8192];
-        char szAbsPath[MAX_PATH];
-        V_MakeAbsolutePath( szAbsPath, sizeof(szAbsPath), pFilename );
-        DoStandardVisualStudioReplacements( pOutputFile, szAbsPath, sFormattedOutputFile, sizeof( sFormattedOutputFile ) );
+        char szFileAbsPath[MAX_PATH];
+        V_MakeAbsolutePath( szFileAbsPath, sizeof(szFileAbsPath), pFilename );
+        DoStandardVisualStudioReplacements( pOutputFile, szFileAbsPath, sFormattedOutputFile, sizeof( sFormattedOutputFile ) );
 
         CSplitString outFiles( sFormattedOutputFile, sDependenciesSeparators, sizeof( sDependenciesSeparators ) / sizeof( sDependenciesSeparators[ 0 ] ) );
 
-        for ( int i = 0; i < outFiles.Count(); i ++ )
+        for ( int j = 0; j < outFiles.Count(); j ++ )
         {
-          const char *pchOneFile = outFiles[ i ];
+          const char *pchOneFile = outFiles[ j ];
           if ( *pchOneFile == '\0' )
           {
             continue;
@@ -800,27 +808,27 @@ public:
         // AdditionalDependencies only applies to custom build steps, not normal compilation steps
         const char *pAdditionalDeps = pFileSpecificData->GetOption( g_pOption_AdditionalDependencies );
         if ( pAdditionalDeps )
-          DoStandardVisualStudioReplacements( pAdditionalDeps, szAbsPath, sFormattedDependencies, sizeof( sFormattedDependencies ) );
+          DoStandardVisualStudioReplacements( pAdditionalDeps, szOutputAbsPath, sFormattedDependencies, sizeof( sFormattedDependencies ) );
         else
           sFormattedDependencies[0] = 0;
 
         CSplitString additionalDeps( sFormattedDependencies, sDependenciesSeparators, sizeof( sDependenciesSeparators ) / sizeof( sDependenciesSeparators[0] ) );
-        FOR_EACH_VEC_BACK( additionalDeps, i )
+        FOR_EACH_VEC_BACK( additionalDeps, j )
         {
-          const char *pchOneFile = additionalDeps[i];
+          const char *pchOneFile = additionalDeps[j];
           if ( *pchOneFile == '\0' )
           {
-            additionalDeps.Remove( i );
+            additionalDeps.Remove( j );
           }
         }
 
         CSplitString outFiles( sFormattedOutputFile, sDependenciesSeparators, sizeof( sDependenciesSeparators ) / sizeof( sDependenciesSeparators[ 0 ] ) );
-        FOR_EACH_VEC_BACK( outFiles, i )
+        FOR_EACH_VEC_BACK( outFiles, j )
         {
-          const char *pchOneFile = outFiles[ i ];
+          const char *pchOneFile = outFiles[ j ];
           if ( *pchOneFile == '\0' )
           {
-            outFiles.Remove( i );
+            outFiles.Remove( j );
           }
         }
 
@@ -851,9 +859,9 @@ public:
         }
         // Outputs dependent on input file and .mak file
         fprintf( fp, ": $(abspath %s) %s", UsePOSIXSlashes( pFilename ), g_pVPC->GetOutputFilename() );
-        FOR_EACH_VEC( additionalDeps, i )
+        FOR_EACH_VEC( additionalDeps, j )
         {
-          fprintf( fp, " %s", additionalDeps[i] );
+          fprintf( fp, " %s", additionalDeps[j] );
         }
         /// XXX(JohnS): Was this double-added as an accident, or is there some arcane make reason to have it be the
         ///             first and last dep?
@@ -866,9 +874,9 @@ public:
 
         static const char *sSeparators[] = { "\r", "\n" };
         CSplitString outLines( sFormattedCommandLine, sSeparators, sizeof( sSeparators ) / sizeof( sSeparators[ 0 ] ) );
-        for ( int i = 0; i < outLines.Count(); ++i )
+        for ( int j = 0; j < outLines.Count(); ++j )
         {
-          const char *pchOneLine = outLines[ i ];
+          const char *pchOneLine = outLines[ j ];
           if ( *pchOneLine == '\0' )
           {
             continue;
@@ -880,10 +888,10 @@ public:
         // for multiple output files, create a dependency between output files and intermediate file + makefile
         if ( outFiles.Count() > 1 )
         {
-          FOR_EACH_VEC( outFiles, i )
+          FOR_EACH_VEC( outFiles, j )
           {
             // See ABSPATH NOTE above
-            fprintf( fp, "$(abspath %s) : %s %s\n\t @touch %s\n\n", outFiles[i], rgchIntermediateFile, g_pVPC->GetOutputFilename(), outFiles[i] );
+            fprintf( fp, "$(abspath %s) : %s %s\n\t @touch %s\n\n", outFiles[j], rgchIntermediateFile, g_pVPC->GetOutputFilename(), outFiles[j] );
           }
         }
       }
@@ -1120,8 +1128,8 @@ public:
   bool m_bForceLowerCaseFileName;
 };
 
-static CProjectGenerator_Makefile g_ProjectGenerator_Makefile;
 IBaseProjectGenerator* GetMakefileProjectGenerator()
 {
+  static CProjectGenerator_Makefile g_ProjectGenerator_Makefile;
   return &g_ProjectGenerator_Makefile;
 }

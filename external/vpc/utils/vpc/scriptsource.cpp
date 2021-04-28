@@ -6,11 +6,14 @@
 
 #include "vpc.h"
 
+#include "tier0/memdbgon.h"
+
 #define MAX_SCRIPT_STACK_SIZE	32
 
 CScript::CScript()
 {
 	m_ScriptName = "(empty)";
+	m_bFreeScriptAtPop = false;
 	m_nScriptLine = 0;
 	m_pScriptData = NULL;
 	m_pScriptLine = &m_nScriptLine;
@@ -401,7 +404,7 @@ void CScript::PopScript()
 
 	if ( m_bFreeScriptAtPop && m_pScriptData )
 	{
-		free( (void *)m_pScriptData );
+		delete[] m_pScriptData;
 	}
 
 	// Restore the top entry on the stack and pop it off.

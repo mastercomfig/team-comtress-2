@@ -566,20 +566,7 @@ typedef void * HINSTANCE;
 // Maximum and minimum representable values
 #ifndef PLATFORM_OSX
 
-#define  INT8_MAX			SCHAR_MAX
-#define  INT16_MAX			SHRT_MAX
-#define  INT32_MAX			LONG_MAX
-#define  INT64_MAX			(((int64)~0) >> 1)
-
-#define  INT8_MIN			SCHAR_MIN
-#define  INT16_MIN			SHRT_MIN
-#define  INT32_MIN			LONG_MIN
-#define  INT64_MIN			(((int64)1) << 63)
-
-#define  UINT8_MAX			((uint8)~0)
-#define  UINT16_MAX			((uint16)~0)
-#define  UINT32_MAX			((uint32)~0)
-#define  UINT64_MAX			((uint64)~0)
+#include <cstdint>
 
 #define  UINT8_MIN			0
 #define  UINT16_MIN			0
@@ -985,7 +972,7 @@ FORCEINLINE double fsel(double fComparand, double fValGE, double fLT)
 
 #else	// BUILD_AS_DLL
 
-#define PLATFORM_INTERFACE	extern
+#define PLATFORM_INTERFACE	extern "C" 
 #define PLATFORM_OVERLOAD
 #define PLATFORM_CLASS
 
@@ -1085,7 +1072,7 @@ typedef int socklen_t;
 //-----------------------------------------------------------------------------
 
 // need macro for constant expression
-#define ALIGN_VALUE( val, alignment ) ( ( val + alignment - 1 ) & ~( alignment - 1 ) ) 
+#define ALIGN_VALUE( val, alignment ) ( ( (val) + (alignment) - 1 ) & ~( (alignment) - 1 ) )
 
 // Force a function call site -not- to inlined. (useful for profiling)
 #define DONT_INLINE(a) (((int)(a)+1)?(a):(a))
@@ -1895,6 +1882,7 @@ enum PlatOSVersion_t
 	// PC-specific OS versions
 	PLAT_OS_VERSION_XP = 5,
 	PLAT_OS_VERSION_VISTA = 6,
+	PLAT_OS_VERSION_TEN = 10,
 };
 
 PLATFORM_INTERFACE PlatOSVersion_t Plat_GetOSVersion();
