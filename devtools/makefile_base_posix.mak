@@ -127,13 +127,13 @@ ifdef MAKE_CHROOT
         $(info '$(SCHROOT_CHROOT_NAME)' is not '$(CHROOT_NAME)')
         $(error This makefile should be run from within a chroot. 'schroot --chroot $(CHROOT_NAME) -- $(MAKE) $(MAKEFLAGS)')  
 	endif
-	GCC_VER = -4.8
+	GCC_VER = -9
 	P4BIN = $(SRCROOT)/devtools/bin/linux/p4
-	CRYPTOPPDIR=ubuntu12_32_gcc48
+	CRYPTOPPDIR=ubuntu12_32
 else ifeq ($(USE_VALVE_BINDIR),1)
 	# Using /valve/bin directory.
 	export STEAM_RUNTIME_PATH ?= /valve
-	GCC_VER = -4.6
+	GCC_VER = -9
 	P4BIN = p4
 	CRYPTOPPDIR=linux32
 else
@@ -207,7 +207,7 @@ endif
 
 ifeq ($(CLANG_BUILD),1)
 	# Clang specific flags
-	WARN_FLAGS += -Wno-unused-const-variable -Wno-unused-local-typedef
+	WARN_FLAGS += -Wno-unused-const-variable -Wno-unused-local-typedef -Wno-register
 else ifeq ($(GCC_VER),-4.8)
 	WARN_FLAGS += -Wno-unused-result
 	WARN_FLAGS += -Wno-unused-but-set-variable
@@ -259,7 +259,8 @@ PATHWRAP = $(_WRAP)fopen $(_WRAP)freopen $(_WRAP)open    $(_WRAP)creat    $(_WRA
 	   $(_WRAP)mknod $(_WRAP)utimes  $(_WRAP)unlink  $(_WRAP)rename   $(_WRAP)utime   $(_WRAP)__xstat64 \
 	   $(_WRAP)mount $(_WRAP)mkfifo  $(_WRAP)mkdir   $(_WRAP)rmdir    $(_WRAP)scandir $(_WRAP)realpath
 
-ifeq "$(BufferSecurityCheck)" "No"
+#ifeq "$(BufferSecurityCheck)" "No"
+ifeq ($(CLANG_BUILD),1)
     CFLAGS += -fno-stack-protector
 else
     ifeq ($(shell $(CC) -fstack-protector-strong -xc -c /dev/null -o /dev/null 2>/dev/null && echo yes || echo no),yes)
@@ -271,13 +272,13 @@ else
     endif
     CFLAGS += $(STACK_PROTECTOR)
 endif
-
+# todo(melvyn2) find out why this breaks, THIS IS VERY BROKEN
 
 LIB_START_EXE = $(PATHWRAP) -static-libgcc -Wl,--start-group
-LIB_END_EXE = -Wl,--end-group -lm -ldl $(LIBSTDCXX) -lpthread
+LIB_END_EXE = -Wl,--end-group -lm -ldl -latomic $(LIBSTDCXX) -lpthread
 
 LIB_START_SHLIB = $(PATHWRAP) -static-libgcc -Wl,--start-group
-LIB_END_SHLIB = -Wl,--end-group -lm -ldl $(LIBSTDCXXPIC) -lpthread -l:$(LD_SO) -Wl,--version-script=$(SRCROOT)/devtools/version_script.linux.txt
+LIB_END_SHLIB = -Wl,--end-group -lm -ldl -latomic $(LIBSTDCXXPIC) -lpthread -l:$(LD_SO) -Wl,--version-script=$(SRCROOT)/devtools/version_script.linux.txt
 
 #
 # Profile-directed optimizations.
@@ -421,7 +422,7 @@ else
 endif
 
 ifneq "$(origin VALVE_NO_AUTO_P4)" "undefined"
-	P4_EDIT_START = chmod -R +w
+	P4_EDIT_START = true
 	P4_EDIT_END = || true
 	P4_REVERT_START = true
 	P4_REVERT_END =
@@ -557,9 +558,9 @@ $(GAMEOUTPUTFILE): $(OUTPUTFILE)
 	$(QUIET_PREFIX) -$(P4_EDIT_START) $(GAMEOUTPUTFILE) $(P4_EDIT_END);
 	$(QUIET_PREFIX) -mkdir -p `dirname $(GAMEOUTPUTFILE)` > /dev/null;
 	$(QUIET_PREFIX) rm -f $(GAMEOUTPUTFILE) $(QUIET_ECHO_POSTFIX);
-	$(QUIET_PREFIX) cp -v $(OUTPUTFILE) $(GAMEOUTPUTFILE) $(QUIET_ECHO_POSTFIX);
+	$(QUIET_PREFIX) cp $(OUTPUTFILE) $(GAMEOUTPUTFILE) $(QUIET_ECHO_POSTFIX);
 	$(QUIET_PREFIX) -$(P4_EDIT_START) $(GAMEOUTPUTFILE)$(SYM_EXT) $(P4_EDIT_END);
-	$(QUIET_PREFIX) $(GEN_SYM) $(GAMEOUTPUTFILE); 
+	$(QUIET_PREFIX) -$(GEN_SYM) $(GAMEOUTPUTFILE);
 	$(QUIET_PREFIX) -$(STRIP) $(GAMEOUTPUTFILE);
 	$(QUIET_PREFIX) $(VSIGN) -signvalve $(GAMEOUTPUTFILE);
 	$(QUIET_PREFIX) if [ "$(COPY_DLL_TO_SRV)" = "1" ]; then\
@@ -575,7 +576,7 @@ $(GAMEOUTPUTFILE): $(OUTPUTFILE)
 		echo "----" $(QUIET_ECHO_POSTFIX);\
 		$(P4_EDIT_START) $(IMPORTLIBRARY) $(P4_EDIT_END) && \
 		mkdir -p `dirname $(IMPORTLIBRARY)` > /dev/null && \
-		cp -v $(OUTPUTFILE) $(IMPORTLIBRARY); \
+		cp $(OUTPUTFILE) $(IMPORTLIBRARY); \
 	fi;
 
 
